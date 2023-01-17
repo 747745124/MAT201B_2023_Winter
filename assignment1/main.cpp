@@ -4,9 +4,9 @@
 // Starter Code for Alssignment 1
 //
 
-#include "../../allolib/include/al/app/al_App.hpp"
-#include "../../allolib/include/al/graphics/al_Image.hpp"
-#include "../../allolib/include/al/io/al_File.hpp"
+#include "allolib/include/al/app/al_App.hpp"
+#include "allolib/include/al/graphics/al_Image.hpp"
+#include "allolib/include/al/io/al_File.hpp"
 // #include <filesystem>
 
 using namespace std;
