@@ -53,7 +53,8 @@ struct AnApp : App
         {
             position.vertex(r() * 10);
             position.color(0, 0, 1);
-            velocity.push_back(Vec3f(-1e-6, 1e-6, 0));
+            // velocity.push_back(Vec3f(-1e-6, 1e-6, 0));
+            velocity.push_back(100 * position.vertices()[i].cross(Vec3f(0.f, 0.f, 1.f)));
             masses.push_back(1e10);
         }
 
