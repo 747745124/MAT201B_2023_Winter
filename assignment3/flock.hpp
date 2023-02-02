@@ -94,6 +94,7 @@ protected:
 public:
     void make_anomaly(float dt)
     {
+        // anomalies
         for (int i = 0; i < Common::anomaly_num; i++)
             boids[i]->position = Vec3f(cos(sum_t), sin(sum_t), sin(sum_t));
 

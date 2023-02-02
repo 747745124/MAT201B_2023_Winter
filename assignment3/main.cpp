@@ -34,7 +34,7 @@ struct AnApp : App
 
     void onCreate() override
     {
-        flock.reset(new Flock(50, static_cast<std::function<Vec3f(void)>>(r)));
+        flock.reset(new Flock(100, static_cast<std::function<Vec3f(void)>>(r)));
 
         Light::globalAmbient({0.2f, 1, 0.2f});
         light.ambient({0.1f, 0.1f, 0.5f});
@@ -45,7 +45,7 @@ struct AnApp : App
         {
             addCone(cones);
             Material material;
-            material.ambient({0, 0.5, 0});
+            material.ambient({_.x, _.y, _.z});
             material.diffuse({1, 1, 0});
             material.specular({0, 0, 1});
             material.shininess(0.5);
@@ -72,7 +72,7 @@ struct AnApp : App
     {
         if (k.key() == k.ENTER)
         {
-            flock.reset(new Flock(50, static_cast<std::function<Vec3f(void)>>(r)));
+            flock.reset(new Flock(100, static_cast<std::function<Vec3f(void)>>(r)));
         }
     }
 
