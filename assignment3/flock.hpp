@@ -11,6 +11,8 @@
 #include "al/graphics/al_Image.hpp"
 #include "al/io/al_File.hpp"
 #include "al/math/al_Random.hpp"
+#include "al/ui/al_Gnomon.hpp"
+#include "al/graphics/al_Shapes.hpp"
 
 using namespace al;
 
@@ -18,6 +20,20 @@ namespace Common
 {
     auto max_speed = 0.3f;
     auto max_force = 1.f;
+    auto anomaly_num = 10;
+};
+
+Color r_color() { return Color(rnd::uniformS(), rnd::uniformS(), rnd::uniformS()); }
+
+Material r_material()
+{
+    Material m;
+    m.shininess((rnd::uniformS() + 1) * 64.f);
+    m.specular(r_color());
+    m.ambient(r_color());
+    m.diffuse(r_color());
+
+    return m;
 };
 
 Vec3f limit(float max_force, Vec3f vec)
@@ -73,8 +89,19 @@ class Flock
 {
 protected:
     std::vector<std::unique_ptr<Boid>> boids;
+    float sum_t = 0.f;
 
 public:
+    void make_anomaly(float dt)
+    {
+        for (int i = 0; i < Common::anomaly_num; i++)
+            boids[i]->position = Vec3f(cos(sum_t), sin(sum_t), sin(sum_t));
+
+        sum_t += dt;
+        if (sum_t >= 6.28)
+            sum_t -= 6.28;
+    };
+
     Flock(int boid_num, std::function<Vec3f(void)> f)
     {
         for (int i = 0; i < boid_num; i++)
@@ -117,8 +144,7 @@ public:
     }
 
     // separate distance
-    void
-    update_separate_velocity(float s_distance)
+    void update_separate_velocity(float s_distance)
     {
         for (int i = 0; i < boids.size(); i++)
         {
@@ -230,6 +256,16 @@ public:
         for (const auto &boid : boids)
         {
             v.push_back(boid->get_position());
+        }
+        return v;
+    };
+
+    std::vector<Vec3f> get_velocities() const
+    {
+        std::vector<Vec3f> v;
+        for (const auto &boid : boids)
+        {
+            v.push_back(boid->get_velocity());
         }
         return v;
     };
