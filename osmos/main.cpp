@@ -124,7 +124,7 @@ struct AlloApp : App
     }
 
     {
-      const std::string filename = "/Users/naoyuki/Library/Mobile Documents/com~apple~CloudDocs/专业课/Master's/201B/allolib_playground/MAT201B-2023/osmos/textures/object_03.png";
+      const std::string filename = "/Users/naoyuki/Library/Mobile Documents/com~apple~CloudDocs/专业课/Master's/201B/allolib_playground/MAT201B-2023/osmos/textures/object_01.png";
       auto imageData = Image(filename);
       if (imageData.array().size() == 0)
       {
@@ -293,11 +293,11 @@ struct AlloApp : App
     glClear(GL_DEPTH_BUFFER_BIT | GL_COLOR_BUFFER_BIT);
 
     g.shader(pointShader);
-    texture.bind();
+    texture.bind(0);
+    texture_alt.bind(1);
     g.shader().uniform("pointSize", pointSize / 10);
     g.shader().uniform("color_tex", 0);
-    // texture_alt.bind();
-    // g.shader().uniform("color_tex_alt", 1);
+    g.shader().uniform("color_tex_alt", 1);
     g.blending(true);
     g.blendTrans();
     g.depthTesting(true);

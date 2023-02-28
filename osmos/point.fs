@@ -30,7 +30,7 @@ void main() {
   }
 
   //add rotation to uv
-  bool which_text = true;
+  bool which_text = fragment.color.r > 0.5;
   vec3 color = vec3(0.f);
 
   if(which_text) {
@@ -45,7 +45,7 @@ void main() {
 
   float brightness = dot(result, vec3(0.3, 0.3, 0.3));
 
-  if(brightness > 0.5)
+  if(brightness > 0.3)
     BrightColor = vec4(result * 1.0, 1.0);
   else
     BrightColor = vec4(0.0, 0.0, 0.0, 1.0);
