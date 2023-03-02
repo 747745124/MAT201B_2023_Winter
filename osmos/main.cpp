@@ -8,13 +8,14 @@
 #include "al/graphics/al_Graphics.hpp"
 #include "renderquad.hpp"
 #include "points.hpp"
-
-using namespace al;
-
+#include "cubemap.hpp"
+#include "al/sound/al_SoundFile.hpp"
 #include <fstream>
 #include <vector>
-using namespace std;
 
+using namespace std;
+using namespace al;
+const int NUM_OF_POINTS = 500;
 Vec3f randomVec3f(float scale)
 {
   return Vec3f(rnd::uniformS(), rnd::uniformS(), rnd::uniformS()) * scale;
@@ -24,6 +25,10 @@ string slurp(string fileName); // forward declaration
 
 struct AlloApp : App
 {
+  SoundFilePlayerTS playerTS;
+  std::vector<float> buffer;
+  bool loop = true;
+
   // simple texture from image
   Texture texture;
   Texture texture_alt;
@@ -39,6 +44,11 @@ struct AlloApp : App
 
   FBO dofFBO;
   Texture dof_tex;
+  // SkyBox skybox;
+
+  GLuint _skybox_vao, _skybox_vbo, _skybox_texture;
+  const std::string folder = "/Users/naoyuki/Library/Mobile Documents/com~apple~CloudDocs/专业课/Master's/201B/allolib_playground/MAT201B-2023/osmos/blue";
+  const std::vector<std::string> _paths = {folder + "/right.png", folder + "/left.png", folder + "/top.png", folder + "/bottom.png", folder + "/front.png", folder + "/back.png"};
 
   Parameter pointSize{"/pointSize", "", 1.0, 0.0, 2.0};
   Parameter timeStep{"/timeStep", "", 0.1, 0.01, 0.6};
@@ -47,6 +57,7 @@ struct AlloApp : App
   ShaderProgram bloomShader;
   ShaderProgram debugShader;
   ShaderProgram dofShader;
+  ShaderProgram skyboxShader;
 
   //  simulation state
   Mesh mesh; // position *is inside the mesh* mesh.vertices() are the positions
@@ -103,10 +114,68 @@ struct AlloApp : App
     auto &gui = GUIdomain->newGUI();
     gui.add(pointSize); // add parameter to GUI
     gui.add(timeStep);  // add parameter to GUI
+
+    {
+      const char name[] = "/Users/naoyuki/Library/Mobile Documents/com~apple~CloudDocs/专业课/Master's/201B/allolib_playground/MAT201B-2023/osmos/data/bgm.wav";
+      if (!playerTS.open(name))
+      {
+        std::cerr << "File not found: " << name << std::endl;
+        quit();
+      }
+      std::cout << "sampleRate: " << playerTS.soundFile.sampleRate << std::endl;
+      std::cout << "channels: " << playerTS.soundFile.channels << std::endl;
+      std::cout << "frameCount: " << playerTS.soundFile.frameCount << std::endl;
+      playerTS.setLoop();
+      playerTS.setPlay();
+    }
   }
 
   void onCreate() override
   {
+    // setup skybox
+    {
+      glGenVertexArrays(1, &_skybox_vao);
+      glGenBuffers(1, &_skybox_vbo);
+      glBindVertexArray(_skybox_vao);
+      glBindBuffer(GL_ARRAY_BUFFER, _skybox_vbo);
+      glBufferData(GL_ARRAY_BUFFER, sizeof(vertices), &vertices, GL_STATIC_DRAW);
+
+      glEnableVertexAttribArray(0);
+      glVertexAttribPointer(0, 3, GL_FLOAT, GL_FALSE, 3 * sizeof(float), 0);
+
+      glBindVertexArray(0);
+
+      // init texture
+      glGenTextures(1, &_skybox_texture);
+      // -----------------------------------------------
+      // write your code to generate texture cubemap
+      glBindTexture(GL_TEXTURE_CUBE_MAP, _skybox_texture);
+      int width = 0, height = 0, channels = 0;
+
+      for (unsigned int i = 0; i < _paths.size(); i++)
+      {
+        unsigned char *data = stbi_load(_paths[i].c_str(), &width, &height, &channels, 0);
+        if (data)
+        {
+          glTexImage2D(GL_TEXTURE_CUBE_MAP_POSITIVE_X + i, 0, GL_RGB, width, height, 0, GL_RGB, GL_UNSIGNED_BYTE, data);
+          cout << width << " " << height << endl;
+          stbi_image_free(data);
+        }
+        else
+        {
+          std::stringstream ss;
+          ss << "Cubemap texture failed to load at path: " << _paths[i];
+          stbi_image_free(data);
+        }
+      }
+
+      glTexParameteri(GL_TEXTURE_CUBE_MAP, GL_TEXTURE_MAG_FILTER, GL_LINEAR);
+      glTexParameteri(GL_TEXTURE_CUBE_MAP, GL_TEXTURE_MIN_FILTER, GL_LINEAR);
+      glTexParameteri(GL_TEXTURE_CUBE_MAP, GL_TEXTURE_WRAP_S, GL_CLAMP_TO_EDGE);
+      glTexParameteri(GL_TEXTURE_CUBE_MAP, GL_TEXTURE_WRAP_T, GL_CLAMP_TO_EDGE);
+      glTexParameteri(GL_TEXTURE_CUBE_MAP, GL_TEXTURE_WRAP_R, GL_CLAMP_TO_EDGE);
+    }
+
     {
       const std::string filename = "/Users/naoyuki/Library/Mobile Documents/com~apple~CloudDocs/专业课/Master's/201B/allolib_playground/MAT201B-2023/osmos/textures/object_02.png";
       auto imageData = Image(filename);
@@ -171,6 +240,9 @@ struct AlloApp : App
 
     dofShader.compile(slurp("../dof.vs"),
                       slurp("../dof.fs"));
+
+    skyboxShader.compile(slurp("../skybox.vs"),
+                         slurp("../skybox.fs"));
     // set initial conditions of the simulation
 
     // c++11 "lambda" function
@@ -180,7 +252,7 @@ struct AlloApp : App
     mesh.primitive(Mesh::POINTS);
     // does 1000 work on your system? how many can you make before you get a low
     // frame rate? do you need to use <1000?
-    for (int _ = 0; _ < 1000; _++)
+    for (int _ = 0; _ < NUM_OF_POINTS; _++)
     {
 
       float ms = 3 + rnd::normal() / 2;
@@ -313,6 +385,21 @@ struct AlloApp : App
 
     g.draw(_mesh);
 
+    // draw skybox
+    glEnable(GL_DEPTH_TEST);
+    glDepthFunc(GL_LEQUAL);
+    g.shader(skyboxShader);
+    g.shader().uniform("projection", view().projMatrix(width(), height()));
+    g.shader().uniform("view", view().viewMatrix());
+    g.shader().uniform("cubemap", 0);
+
+    glBindVertexArray(_skybox_vao);
+    glActiveTexture(GL_TEXTURE0);
+    glBindTexture(GL_TEXTURE_CUBE_MAP, _skybox_texture);
+    glDrawArrays(GL_TRIANGLES, 0, 36);
+    glBindVertexArray(0);
+    glDepthFunc(GL_LESS); // set depth function back to default
+
     texture.unbind();
     // texture_alt.unbind();
     hdrFBO.unbind();
@@ -380,6 +467,7 @@ struct AlloApp : App
     g.shader().uniform("postBuffer", 0);
     dof_tex.bind(0);
     renderQuad();
+    // // draw skybox
 
     // // debug
     // g.clear(0, 0, 0);
@@ -388,12 +476,32 @@ struct AlloApp : App
   }
 
   void onResize(int w, int h) override { updateFBO(w, h); };
+
+  void onSound(AudioIOData &io) override
+  {
+    int frames = (int)io.framesPerBuffer();
+    int channels = playerTS.soundFile.channels;
+    int bufferLength = frames * channels;
+    if ((int)buffer.size() < bufferLength)
+    {
+      buffer.resize(bufferLength);
+    }
+    playerTS.getFrames(frames, buffer.data(), (int)buffer.size());
+    int second = (channels < 2) ? 0 : 1;
+    while (io())
+    {
+      int frame = (int)io.frame();
+      int idx = frame * channels;
+      io.out(0) = buffer[idx];
+      io.out(1) = buffer[idx + second];
+    }
+  }
 };
 
 int main()
 {
   AlloApp app;
-  app.configureAudio(48000, 512, 2, 0);
+  app.configureAudio(44100, 512, 2, 0);
   app.start();
 }
 

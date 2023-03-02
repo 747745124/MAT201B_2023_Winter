@@ -45,10 +45,10 @@ void main() {
 
   float brightness = dot(result, vec3(0.3, 0.3, 0.3));
 
-  if(brightness > 0.3)
-    BrightColor = vec4(result * 1.0, 1.0);
+  if(brightness > 0.2)
+    BrightColor = vec4(result * 1.0, 1 - r * r);
   else
-    BrightColor = vec4(0.0, 0.0, 0.0, 1.0);
+    BrightColor = vec4(0.0, 0.0, 0.0, 1 - r * r);
 
   FragColor = vec4(result, 1 - r * r);
 }

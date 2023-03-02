@@ -4,7 +4,7 @@ out vec4 color;
 in vec2 TexCoords;
 uniform sampler2D postBuffer;
 uniform vec2 mouseFocus = vec2(0.5, 0.5);
-const int mean_step = 3;
+const int mean_step = 10;
 const float minDistance = 0.0;
 const float maxDistance = 0.707f;
 
