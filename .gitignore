@@ -1,7 +1,4 @@
 bin/
 build/
-*.wav
-*.png
-*.jpg
 .gitignore
 .DS_Store
