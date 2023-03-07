@@ -14,8 +14,9 @@ struct Point
     al::Vec3f acceleration;
     al::Vec3f velocity;
     float rotation_angle;
+    bool is_user_control = false;
 
-    Point(float mass, al::Vec2f size, al::Color color, al::Vec3f position, al::Vec3f acceleration, al::Vec3f velocity)
+    Point(float mass, al::Vec2f size, al::Color color, al::Vec3f position, al::Vec3f acceleration, al::Vec3f velocity, bool is_user_control)
     {
         this->mass = mass;
         this->size = size;
@@ -23,6 +24,7 @@ struct Point
         this->position = position;
         this->acceleration = acceleration;
         this->velocity = velocity;
-        rotation_angle = rnd::normal();
+        this->rotation_angle = rnd::normal();
+        this->is_user_control = is_user_control;
     };
 };
