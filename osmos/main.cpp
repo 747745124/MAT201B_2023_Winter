@@ -1,5 +1,9 @@
-// Karl Yerkes
-// 2022-01-20
+// Shaokang
+// To do list:
+// Add interactions:
+// 1. User can control an point
+// it will be the over the shoulder camera
+// 2. when two points collide, the smaller one will be absorbed by the bigger one
 
 #include "al/app/al_App.hpp"
 #include "al/app/al_GUIDomain.hpp"
@@ -12,6 +16,8 @@
 #include "al/sound/al_SoundFile.hpp"
 #include <fstream>
 #include <vector>
+#include "GLFW/glfw3.h"
+#include "glad/glad.h"
 
 using namespace std;
 using namespace al;
@@ -32,6 +38,7 @@ struct AlloApp : App
   // simple texture from image
   Texture texture;
   Texture texture_alt;
+  Texture texture_user;
   Texture background;
 
   // an hdr fbo with 2 texture as render target
@@ -47,11 +54,12 @@ struct AlloApp : App
   // SkyBox skybox;
 
   GLuint _skybox_vao, _skybox_vbo, _skybox_texture;
-  const std::string folder = "/Users/naoyuki/Library/Mobile Documents/com~apple~CloudDocs/专业课/Master's/201B/allolib_playground/MAT201B-2023/osmos/blue";
+  const std::string folder = "../blue";
   const std::vector<std::string> _paths = {folder + "/right.png", folder + "/left.png", folder + "/top.png", folder + "/bottom.png", folder + "/front.png", folder + "/back.png"};
 
   Parameter pointSize{"/pointSize", "", 1.0, 0.0, 2.0};
   Parameter timeStep{"/timeStep", "", 0.1, 0.01, 0.6};
+
   ShaderProgram pointShader;
   ShaderProgram blurShader;
   ShaderProgram bloomShader;
@@ -59,12 +67,26 @@ struct AlloApp : App
   ShaderProgram dofShader;
   ShaderProgram skyboxShader;
 
+  // c++11 "lambda" function
+  std::function<HSV()> randomColor = []()
+  { return HSV(rnd::uniform(), 1.0f, 1.0f); };
+
   //  simulation state
   Mesh mesh; // position *is inside the mesh* mesh.vertices() are the positions
   vector<Vec3f> velocity;
   vector<Vec3f> acceleration;
   vector<float> mass;
   vector<Point> points;
+  Vec2f dir;
+  // assume up is always the default
+  Vec3f user_face_toward;
+  Vec3f user_right;
+
+  // parameters for generating a new particle
+  float press_time[6] = {0.0f};
+  bool is_initiated = false;
+  float total_time;
+  float move_step;
 
   void updateFBO(int w, int h)
   {
@@ -116,7 +138,7 @@ struct AlloApp : App
     gui.add(timeStep);  // add parameter to GUI
 
     {
-      const char name[] = "/Users/naoyuki/Library/Mobile Documents/com~apple~CloudDocs/专业课/Master's/201B/allolib_playground/MAT201B-2023/osmos/data/bgm.wav";
+      const char name[] = "../data/bgm.wav";
       if (!playerTS.open(name))
       {
         std::cerr << "File not found: " << name << std::endl;
@@ -125,8 +147,8 @@ struct AlloApp : App
       std::cout << "sampleRate: " << playerTS.soundFile.sampleRate << std::endl;
       std::cout << "channels: " << playerTS.soundFile.channels << std::endl;
       std::cout << "frameCount: " << playerTS.soundFile.frameCount << std::endl;
-      playerTS.setLoop();
-      playerTS.setPlay();
+      // playerTS.setLoop();
+      // playerTS.setPlay();
     }
   }
 
@@ -177,7 +199,7 @@ struct AlloApp : App
     }
 
     {
-      const std::string filename = "/Users/naoyuki/Library/Mobile Documents/com~apple~CloudDocs/专业课/Master's/201B/allolib_playground/MAT201B-2023/osmos/textures/object_02.png";
+      const std::string filename = "../textures/object_02.png";
       auto imageData = Image(filename);
       if (imageData.array().size() == 0)
       {
@@ -193,7 +215,7 @@ struct AlloApp : App
     }
 
     {
-      const std::string filename = "/Users/naoyuki/Library/Mobile Documents/com~apple~CloudDocs/专业课/Master's/201B/allolib_playground/MAT201B-2023/osmos/textures/object_01.png";
+      const std::string filename = "../textures/object_01.png";
       auto imageData = Image(filename);
       if (imageData.array().size() == 0)
       {
@@ -209,7 +231,23 @@ struct AlloApp : App
     }
 
     {
-      const std::string filename = "/Users/naoyuki/Library/Mobile Documents/com~apple~CloudDocs/专业课/Master's/201B/allolib_playground/MAT201B-2023/osmos/textures/etheral.png";
+      const std::string filename = "../textures/object_07.png";
+      auto imageData = Image(filename);
+      if (imageData.array().size() == 0)
+      {
+        cout << "failed to load image " << filename << endl;
+      }
+      cout << "loaded image size: " << imageData.width() << ", "
+           << imageData.height() << endl;
+
+      texture_user.create2D(imageData.width(), imageData.height());
+      texture_user.submit(imageData.array().data(), GL_RGBA, GL_UNSIGNED_BYTE);
+      texture_user.filter(Texture::LINEAR);
+      texture_user.wrap(GL_MIRRORED_REPEAT);
+    }
+
+    {
+      const std::string filename = "../textures/etheral.png";
       auto imageData = Image(filename);
       if (imageData.array().size() == 0)
       {
@@ -245,13 +283,7 @@ struct AlloApp : App
                          slurp("../skybox.fs"));
     // set initial conditions of the simulation
 
-    // c++11 "lambda" function
-    auto randomColor = []()
-    { return HSV(rnd::uniform(), 1.0f, 1.0f); };
-
     mesh.primitive(Mesh::POINTS);
-    // does 1000 work on your system? how many can you make before you get a low
-    // frame rate? do you need to use <1000?
     for (int _ = 0; _ < NUM_OF_POINTS; _++)
     {
 
@@ -259,46 +291,81 @@ struct AlloApp : App
       if (ms < 0.5)
         ms = 0.5;
 
-      Vec3f pos = randomVec3f(5);
-      Vec3f vel = randomVec3f(0.1);
-      Vec3f acc = randomVec3f(1);
+      Vec3f pos = randomVec3f(15);
+      Vec3f vel = randomVec3f(0);
+      Vec3f acc = randomVec3f(0.01);
       Color color = randomColor();
       Vec2f size(pow(ms, 1.0f / 3), 0);
-      points.push_back(Point(ms, size, color, pos, acc, vel));
-
-      // mesh.vertex(randomVec3f(5));
-      // mesh.color(randomColor());
-      // // float m = rnd::uniform(3.0, 0.5);
-      // float m = 3 + rnd::normal() / 2;
-      // if (m < 0.5)
-      //   m = 0.5;
-      // mass.push_back(m);
-      // // using a simplified volume/size relationship
-      // mesh.texCoord(pow(m, 1.0f / 3), 0); // s, t
-
-      // // separate state arrays
-      // velocity.push_back(randomVec3f(0.1));
-      // acceleration.push_back(randomVec3f(1));
+      points.push_back(Point(ms, size, color, pos, acc, vel, false));
     }
 
-    nav().pos(0, 0, 10);
+    points[0].position = Vec3f(0, 0, 15.f);
+    points[0].acceleration = Vec3f(0);
+    points[0].velocity = Vec3f(0);
+    points[0].is_user_control = true;
+
+    // set the camera to the over the shoulder of the first point
+    Vec3f offset(0.9f, 0.75f, 5.0f);
+    nav().pos(points[0].position + offset);
+
+    // problem here, it's not always the first point to be the user-controlled one
+    // a little modification to the sorting
+    // The user controlled one always draws on top of other layer
     Vec3f eye = nav().pos();
     sort(points.begin(), points.end(), [&](Point &p1, Point &p2)
-         { return (eye - p1.position).mag() > (eye - p2.position).mag(); });
-    // Vec3f eye = nav().pos();
-    // sort(mesh.vertices().begin(), mesh.vertices().end(), [&](Vec3f v1, Vec3f v2)
-    //      { return (eye - v1).mag() > (eye - v2).mag(); });
-
-    // auto indices = sort_indexes(mesh.vertices());
-    // for (int i = 0; i < indices.size(); ++i)
-    // {
-    //   mesh.vertices()[i] = mesh.vertices()[indices[i]];
-    // }
+         { 
+           if (p1.is_user_control)
+             return true;
+           if (p2.is_user_control)
+             return false;
+          return (eye - p1.position).mag() > (eye - p2.position).mag(); });
 
     updateFBO(width(), height());
   }
 
   bool freeze = false;
+
+  // raw opengl way of doing things
+  // just for continous movement
+  void processInput()
+  {
+    auto window = (GLFWwindow *)defaultWindow().windowHandle();
+    if (glfwGetKey(window, GLFW_KEY_W) == GLFW_PRESS)
+    {
+      points[0].position += Vec3f(0, 0, -0.5f) / points[0].mass * timeStep;
+      dir = Vec2f(0, 0);
+    }
+    if (glfwGetKey(window, GLFW_KEY_D) == GLFW_PRESS)
+    {
+      points[0].position += Vec3f(0.5, 0.0, 0) / points[0].mass * timeStep;
+      dir = Vec2f(1.f, 0);
+    }
+    if (glfwGetKey(window, GLFW_KEY_A) == GLFW_PRESS)
+    {
+      points[0].position += Vec3f(-0.5, 0.0, 0) / points[0].mass * timeStep;
+      dir = Vec2f(-1.f, 0);
+    }
+    if (glfwGetKey(window, GLFW_KEY_X) == GLFW_PRESS)
+    {
+      points[0].position += Vec3f(0, 0, 0.5f) / points[0].mass * timeStep;
+      dir = Vec2f(0, 0);
+    }
+    if (glfwGetKey(window, GLFW_KEY_E) == GLFW_PRESS)
+    {
+      points[0].position += Vec3f(0.0, 0.5, 0) / points[0].mass * timeStep;
+      dir = Vec2f(-1.f, 0);
+    }
+    if (glfwGetKey(window, GLFW_KEY_C) == GLFW_PRESS)
+    {
+      points[0].position += Vec3f(0, -0.5f, 0) / points[0].mass * timeStep;
+      dir = Vec2f(0, 0);
+    }
+    // it should be rotate
+    if (glfwGetKey(window, GLFW_KEY_LEFT) == GLFW_PRESS)
+    {
+    }
+  };
+
   void onAnimate(double dt) override
   {
     if (freeze)
@@ -307,39 +374,175 @@ struct AlloApp : App
     // ignore the real dt and set the time step;
     dt = timeStep;
 
-    // Calculate forces
+    processInput();
+    // cout << points[0].velocity << endl;
 
-    // drag
-    for (int i = 0; i < velocity.size(); i++)
+    // if any two points are within a certain distance (collide)
+    // the small one gets absorbed into the big one
+    // delete the small one, and update the big one's velocity, mass, size
+
+    for (int i = 0; i < points.size(); i++)
+    {
+      for (int j = 0; j < points.size(); j++)
+      {
+        if (i == j)
+          continue;
+
+        auto dist_2d = pow((points[i].position.x - points[j].position.x), 2.0f) + pow((points[i].position.y - points[j].position.y), 2.0f);
+        auto dist_3d = (points[i].position - points[j].position).mag();
+        auto r_sum = points[i].size.x + points[j].size.x;
+        // cout << dist << " " << r_sum << endl;
+        if (dist_2d < r_sum * 0.001)
+        {
+          if (points[i].mass > points[j].mass)
+          {
+            points[i].mass += points[j].mass;
+            points[i].size.x = pow(points[i].mass, 1.0f / 1.5f);
+            points[i].velocity += points[j].velocity * points[j].mass / points[i].mass;
+            if (j == 0)
+              freeze = true;
+            points.erase(points.begin() + j);
+          }
+          else
+          {
+            points[j].mass += points[i].mass;
+            points[j].size.x = pow(points[j].mass, 1.0f / 1.5f);
+            points[j].velocity += points[i].velocity * points[i].mass / points[j].mass;
+            if (i == 0)
+              freeze = true;
+            points.erase(points.begin() + i);
+          }
+        }
+      }
+    }
+
+    if (points[0].mass <= 0.0)
+      freeze = true;
+
+    for (int i = 1; i < velocity.size(); i++)
     {
       points[i].acceleration -= points[i].velocity * 1;
     }
 
-    // Integration
-    //
-    // vector<Vec3f> &position(mesh.vertices());
-
-    for (int i = 0; i < points.size(); i++)
+    for (int i = 1; i < points.size(); i++)
     {
-      // "semi-implicit" Euler integration
       points[i].velocity += points[i].acceleration / points[i].mass * dt;
       points[i].position += points[i].velocity * dt;
       points[i].acceleration = 0;
-      // Explicit (or "forward") Euler integration would look like this:
-      // position[i] += velocity[i] * dt;
-      // velocity[i] += acceleration[i] / mass[i] * dt;
     }
 
     Vec3f eye = nav().pos();
     sort(points.begin(), points.end(), [&](Point p1, Point p2)
-         { return (eye - p1.position).mag() > (eye - p2.position).mag(); });
+         { if (p1.is_user_control)
+             return true;
+           if (p2.is_user_control)
+             return false; 
+          return (eye - p1.position).mag() > (eye - p2.position).mag(); });
+
+    Vec3f offset(0.9f, 0.75f, 5.0f);
+    nav().pos(points[0].position + offset);
+  }
+
+  bool onKeyUp(const Keyboard &k) override
+  {
+    float delta_time = 0.0f;
+    Vec3f going_dir;
+
+    if (k.key() == 'w')
+    {
+      delta_time = total_time - press_time[0];
+      going_dir = Vec3f(0, -0.5, -1);
+    }
+    if (k.key() == 'a')
+    {
+      delta_time = total_time - press_time[1];
+      going_dir = Vec3f(-1, 0, 0);
+    }
+    if (k.key() == 'd')
+    {
+      delta_time = total_time - press_time[2];
+      going_dir = Vec3f(1, 0, 0);
+    }
+    if (k.key() == 'x')
+    {
+      delta_time = total_time - press_time[3];
+      going_dir = Vec3f(0, 0.5, 1);
+    }
+    if (k.key() == 'e')
+    {
+      delta_time = total_time - press_time[4];
+      going_dir = Vec3f(0, 1, 0);
+    }
+    if (k.key() == 'c')
+    {
+      delta_time = total_time - press_time[5];
+      going_dir = Vec3f(0, -1, 0);
+    }
+
+    if (delta_time < 0)
+      delta_time = 2.0;
+
+    float ms = delta_time * 0.5;
+
+    Vec3f pos = points[0].position - 0.1f * going_dir;
+    // pseudo momentum conservation
+    Vec3f vel = -0.001f * points[0].mass * going_dir / ms;
+    Vec3f acc = randomVec3f(0);
+    Color color = randomColor();
+    Vec2f size(pow(ms, 1.0f / 1.5f), 0);
+
+    points.push_back(Point(ms, size, color, pos, acc, vel, false));
+
+    Vec3f eye = nav().pos();
+    sort(points.begin(), points.end(), [&](Point p1, Point p2)
+         { if (p1.is_user_control)
+             return true;
+           if (p2.is_user_control)
+             return false; 
+          return (eye - p1.position).mag() > (eye - p2.position).mag(); });
+
+    points[0].mass -= ms * 0.1;
+    points[0].size.x = pow(points[0].mass, 1.0f / 1.5f);
+    cout << points[0].mass << endl;
+    cout << points[0].size.x << endl;
   }
 
   bool onKeyDown(const Keyboard &k) override
   {
+    if (k.key() == 'w')
+    {
+      press_time[0] = total_time;
+    }
+    if (k.key() == 'a')
+    {
+      press_time[1] = total_time;
+    }
+    if (k.key() == 'd')
+    {
+      press_time[2] = total_time;
+    }
+    if (k.key() == 'x')
+    {
+      press_time[3] = total_time;
+    }
+    if (k.key() == 'e')
+    {
+      press_time[4] = total_time;
+    }
+    if (k.key() == 'c')
+    {
+      press_time[5] = total_time;
+    }
+
     if (k.key() == ' ')
     {
       freeze = !freeze;
+    }
+
+    if (k.key() == 'r')
+    {
+      Vec3f offset(0.9f, 0.75f, 0.0f);
+      nav().faceToward(points[0].position + offset);
     }
 
     if (k.key() == '1')
@@ -352,11 +555,58 @@ struct AlloApp : App
       }
     }
 
+    if (k.key() == Keyboard::Key::ENTER)
+    {
+      points.clear();
+      freeze = false;
+      for (int _ = 0; _ < NUM_OF_POINTS; _++)
+      {
+
+        float ms = 3 + rnd::normal() / 2;
+        if (ms < 0.5)
+          ms = 0.5;
+
+        Vec3f pos = randomVec3f(15);
+        Vec3f vel = randomVec3f(0);
+        Vec3f acc = randomVec3f(0.01);
+        Color color = randomColor();
+        Vec2f size(pow(ms, 1.0f / 1.5f), 0);
+        points.push_back(Point(ms, size, color, pos, acc, vel, false));
+      }
+
+      points[0].position = Vec3f(0, 0, 15.f);
+      points[0].acceleration = Vec3f(0);
+      points[0].velocity = Vec3f(0);
+      points[0].is_user_control = true;
+
+      // set the camera to the over the shoulder of the first point
+      Vec3f offset(0.9f, 0.75f, 5.0f);
+      nav().pos(points[0].position + offset);
+
+      // problem here, it's not always the first point to be the user-controlled one
+      // a little modification to the sorting
+      // The user controlled one always draws on top of other layer
+      Vec3f eye = nav().pos();
+      sort(points.begin(), points.end(), [&](Point &p1, Point &p2)
+           { 
+           if (p1.is_user_control)
+             return true;
+           if (p2.is_user_control)
+             return false;
+          return (eye - p1.position).mag() > (eye - p2.position).mag(); });
+    }
+
     return true;
   }
 
   void onDraw(Graphics &g) override
   {
+    {
+      if (total_time >= 3.14f)
+        total_time -= 3.14f;
+
+      total_time += 0.01f;
+    }
     // 1st pass render scene into floating point framebuffer
     hdrFBO.bind();
     // Clear FBO
@@ -367,22 +617,41 @@ struct AlloApp : App
     g.shader(pointShader);
     texture.bind(0);
     texture_alt.bind(1);
+    texture_user.bind(2);
     g.shader().uniform("pointSize", pointSize / 10);
     g.shader().uniform("color_tex", 0);
     g.shader().uniform("color_tex_alt", 1);
+    g.shader().uniform("color_user", 2);
+    g.shader().uniform("is_user", false);
+    g.shader().uniform("direction", dir);
+    // this one defines how other points look like
+    g.shader().uniform("user_size", points[0].size.x);
+    g.shader().uniform("is_dead", freeze);
     g.blending(true);
     g.blendTrans();
     g.depthTesting(true);
 
     Mesh _mesh;
     _mesh.primitive(Mesh::POINTS);
-    for (auto &point : points)
+    for (int i = 1; i < points.size(); i++)
     {
+      auto point = points[i];
       _mesh.vertex(point.position);
       _mesh.color(point.color);
       _mesh.texCoord(point.size.x, point.size.y);
     }
 
+    g.draw(_mesh);
+
+    // draw the user controlled point
+    _mesh.reset();
+    _mesh.primitive(Mesh::POINTS);
+    g.shader().uniform("is_user", true);
+    g.shader().uniform("time", total_time);
+    auto point = points[0];
+    _mesh.vertex(point.position);
+    _mesh.color(point.color);
+    _mesh.texCoord(point.size.x, point.size.y);
     g.draw(_mesh);
 
     // draw skybox
@@ -405,7 +674,7 @@ struct AlloApp : App
     hdrFBO.unbind();
 
     // 2nd blur pass (multiple times)
-    g.blending(false);
+    // g.blending(false);
     bool horizontal = true, first_itr = true;
     uint blur_amount = 10;
     for (uint i = 0; i < blur_amount; i++)

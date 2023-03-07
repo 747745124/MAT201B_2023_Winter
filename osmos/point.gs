@@ -16,6 +16,7 @@ in Vertex {
 out Fragment {
   vec4 color;
   vec2 mapping;
+  float size;
 } fragment;
 
 void main() {
@@ -28,21 +29,25 @@ void main() {
   gl_Position = m * (v + vec4(-r, -r, 0.0, 0.0));
   fragment.color = vertex[0].color;
   fragment.mapping = vec2(-1.0, -1.0);
+  fragment.size = vertex[0].size;
   EmitVertex();
 
   gl_Position = m * (v + vec4(r, -r, 0.0, 0.0));
   fragment.color = vertex[0].color;
   fragment.mapping = vec2(1.0, -1.0);
+  fragment.size = vertex[0].size;
   EmitVertex();
 
   gl_Position = m * (v + vec4(-r, r, 0.0, 0.0));
   fragment.color = vertex[0].color;
   fragment.mapping = vec2(-1.0, 1.0);
+  fragment.size = vertex[0].size;
   EmitVertex();
 
   gl_Position = m * (v + vec4(r, r, 0.0, 0.0));
   fragment.color = vertex[0].color;
   fragment.mapping = vec2(1.0, 1.0);
+  fragment.size = vertex[0].size;
   EmitVertex();
 
   EndPrimitive();

@@ -4,7 +4,7 @@
 #include "al/math/al_Random.hpp"
 #include "al/graphics/al_Image.hpp"
 #include <glm/glm.hpp>
-#include <stb_image.h>
+#include "stb_image.h"
 using namespace std;
 using namespace al;
 
