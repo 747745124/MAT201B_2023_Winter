@@ -9,6 +9,7 @@
 #include "al/app/al_GUIDomain.hpp"
 #include "al/math/al_Random.hpp"
 #include "al/graphics/al_Image.hpp"
+#include "al/app/al_DistributedApp.hpp"
 #include "al/graphics/al_Graphics.hpp"
 #include "renderquad.hpp"
 #include "points.hpp"
@@ -22,6 +23,7 @@
 using namespace std;
 using namespace al;
 const int NUM_OF_POINTS = 500;
+
 Vec3f randomVec3f(float scale)
 {
   return Vec3f(rnd::uniformS(), rnd::uniformS(), rnd::uniformS()) * scale;
@@ -29,7 +31,7 @@ Vec3f randomVec3f(float scale)
 
 string slurp(string fileName); // forward declaration
 
-struct AlloApp : App
+struct AlloApp : DistributedApp
 {
   SoundFilePlayerTS playerTS;
   std::vector<float> buffer;
@@ -59,6 +61,7 @@ struct AlloApp : App
 
   Parameter pointSize{"/pointSize", "", 1.0, 0.0, 2.0};
   Parameter timeStep{"/timeStep", "", 0.1, 0.01, 0.6};
+  Parameter sound_volume{"/soundVolume", "", 0.0, 0.01, 0.5};
 
   ShaderProgram pointShader;
   ShaderProgram blurShader;
@@ -90,7 +93,6 @@ struct AlloApp : App
 
   void updateFBO(int w, int h)
   {
-
     // using floating point precision for HDR
     bright_tex.create2D(w, h, GL_RGBA16F, GL_RGBA, GL_FLOAT);
     color_tex.create2D(w, h, GL_RGBA16F, GL_RGBA, GL_FLOAT);
@@ -136,6 +138,7 @@ struct AlloApp : App
     auto &gui = GUIdomain->newGUI();
     gui.add(pointSize); // add parameter to GUI
     gui.add(timeStep);  // add parameter to GUI
+    gui.add(sound_volume);
 
     {
       const char name[] = "../data/bgm.wav";
@@ -307,6 +310,7 @@ struct AlloApp : App
     // set the camera to the over the shoulder of the first point
     Vec3f offset(0.9f, 0.75f, 5.0f);
     nav().pos(points[0].position + offset);
+    // nav().nudge(points[0].position + offset);
 
     // problem here, it's not always the first point to be the user-controlled one
     // a little modification to the sorting
@@ -359,10 +363,6 @@ struct AlloApp : App
     {
       points[0].position += Vec3f(0, -0.5f, 0) / points[0].mass * timeStep;
       dir = Vec2f(0, 0);
-    }
-    // it should be rotate
-    if (glfwGetKey(window, GLFW_KEY_LEFT) == GLFW_PRESS)
-    {
     }
   };
 
@@ -503,8 +503,6 @@ struct AlloApp : App
 
     points[0].mass -= ms * 0.1;
     points[0].size.x = pow(points[0].mass, 1.0f / 1.5f);
-    cout << points[0].mass << endl;
-    cout << points[0].size.x << endl;
   }
 
   bool onKeyDown(const Keyboard &k) override
@@ -532,6 +530,13 @@ struct AlloApp : App
     if (k.key() == 'c')
     {
       press_time[5] = total_time;
+    }
+
+    // lock camera
+    {
+      nav().spinF(0.0);
+      nav().spinU(0.0);
+      nav().spinR(0.0);
     }
 
     if (k.key() == ' ')
@@ -761,8 +766,8 @@ struct AlloApp : App
     {
       int frame = (int)io.frame();
       int idx = frame * channels;
-      io.out(0) = buffer[idx];
-      io.out(1) = buffer[idx + second];
+      io.out(0) = buffer[idx] * sound_volume;
+      io.out(1) = buffer[idx + second] * sound_volume;
     }
   }
 };
