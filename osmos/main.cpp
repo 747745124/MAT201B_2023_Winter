@@ -132,12 +132,15 @@ struct AlloApp : DistributedApp
 
   void onInit() override
   {
-    // set up GUI
-    auto GUIdomain = GUIDomain::enableGUI(defaultWindowDomain());
-    auto &gui = GUIdomain->newGUI();
-    gui.add(pointSize); // add parameter to GUI
-    gui.add(timeStep);  // add parameter to GUI
-    gui.add(sound_volume);
+    if (isPrimary())
+    {
+      // set up GUI
+      auto GUIdomain = GUIDomain::enableGUI(defaultWindowDomain());
+      auto &gui = GUIdomain->newGUI();
+      gui.add(pointSize); // add parameter to GUI
+      gui.add(timeStep);  // add parameter to GUI
+      gui.add(sound_volume);
+    }
 
     {
       const char name[] = "../data/bgm.wav";
@@ -152,7 +155,7 @@ struct AlloApp : DistributedApp
       // playerTS.setLoop();
       // playerTS.setPlay();
     }
-  }
+    }
 
   void onCreate() override
   {
