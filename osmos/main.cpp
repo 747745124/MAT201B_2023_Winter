@@ -333,8 +333,8 @@ struct AlloApp : DistributedApp
   // just for continous movement
   void processInput()
   {
-    if (!isPrimary())
-      return;
+    // if (!isPrimary())
+    //   return;
 
     auto window = (GLFWwindow *)defaultWindow().windowHandle();
     if (glfwGetKey(window, GLFW_KEY_W) == GLFW_PRESS)
@@ -450,8 +450,8 @@ struct AlloApp : DistributedApp
 
   bool onKeyUp(const Keyboard &k) override
   {
-    if (!isPrimary())
-      return true;
+    // if (!isPrimary())
+    //   return true;
 
     float delta_time = 0.0f;
     Vec3f going_dir;
@@ -515,8 +515,8 @@ struct AlloApp : DistributedApp
 
   bool onKeyDown(const Keyboard &k) override
   {
-    if (!isPrimary())
-      return true;
+    // if (!isPrimary())
+    //   return true;
 
     if (k.key() == 'w')
     {
