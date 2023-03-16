@@ -156,7 +156,7 @@ struct AlloApp : DistributedApp
 
   void onCreate() override
   {
-    parameterServer() << pointSize << timeStep;
+    // parameterServer() << pointSize << timeStep;
 
     {
       glGenVertexArrays(1, &_skybox_vao);
@@ -445,7 +445,7 @@ struct AlloApp : DistributedApp
     Vec3f offset(0.9f, 0.75f, 5.0f);
     nav().pos(points[0].position + offset);
 
-    parameterServer() << points;
+    // parameterServer() << points;
   }
 
   bool onKeyUp(const Keyboard &k) override
