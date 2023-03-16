@@ -70,7 +70,6 @@ struct AlloApp : DistributedApp
   ShaderProgram dofShader;
   ShaderProgram skyboxShader;
 
-  // c++11 "lambda" function
   std::function<HSV()> randomColor = []()
   { return HSV(rnd::uniform(), 1.0f, 1.0f); };
 
@@ -157,7 +156,8 @@ struct AlloApp : DistributedApp
 
   void onCreate() override
   {
-    // setup skybox
+    parameterServer() << pointSize << timeStep;
+
     {
       glGenVertexArrays(1, &_skybox_vao);
       glGenBuffers(1, &_skybox_vbo);
@@ -333,6 +333,9 @@ struct AlloApp : DistributedApp
   // just for continous movement
   void processInput()
   {
+    if (!isPrimary())
+      return;
+
     auto window = (GLFWwindow *)defaultWindow().windowHandle();
     if (glfwGetKey(window, GLFW_KEY_W) == GLFW_PRESS)
     {
@@ -441,10 +444,15 @@ struct AlloApp : DistributedApp
 
     Vec3f offset(0.9f, 0.75f, 5.0f);
     nav().pos(points[0].position + offset);
+
+    parameterServer() << points;
   }
 
   bool onKeyUp(const Keyboard &k) override
   {
+    if (!isPrimary())
+      return true;
+
     float delta_time = 0.0f;
     Vec3f going_dir;
 
@@ -507,6 +515,9 @@ struct AlloApp : DistributedApp
 
   bool onKeyDown(const Keyboard &k) override
   {
+    if (!isPrimary())
+      return true;
+
     if (k.key() == 'w')
     {
       press_time[0] = total_time;
