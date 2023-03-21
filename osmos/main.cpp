@@ -31,7 +31,7 @@ Vec3f randomVec3f(float scale)
 
 string slurp(string fileName); // forward declaration
 
-struct AlloApp : DistributedApp
+struct AlloApp : App
 {
   SoundFilePlayerTS playerTS;
   std::vector<float> buffer;
@@ -132,15 +132,15 @@ struct AlloApp : DistributedApp
 
   void onInit() override
   {
-    if (isPrimary())
-    {
-      // set up GUI
-      auto GUIdomain = GUIDomain::enableGUI(defaultWindowDomain());
-      auto &gui = GUIdomain->newGUI();
-      gui.add(pointSize); // add parameter to GUI
-      gui.add(timeStep);  // add parameter to GUI
-      gui.add(sound_volume);
-    }
+
+    // set up GUI
+    auto GUIdomain = GUIDomain::enableGUI(defaultWindowDomain());
+    auto &gui = GUIdomain->newGUI();
+    gui.add(pointSize); // add parameter to GUI
+    gui.add(timeStep);  // add parameter to GUI
+    gui.add(sound_volume);
+
+    updateFBO(fbWidth(), fbHeight());
 
     {
       const char name[] = "../data/bgm.wav";
@@ -155,7 +155,7 @@ struct AlloApp : DistributedApp
       // playerTS.setLoop();
       // playerTS.setPlay();
     }
-    }
+  }
 
   void onCreate() override
   {
@@ -336,8 +336,6 @@ struct AlloApp : DistributedApp
   // just for continous movement
   void processInput()
   {
-    // if (!isPrimary())
-    //   return;
 
     auto window = (GLFWwindow *)defaultWindow().windowHandle();
     if (glfwGetKey(window, GLFW_KEY_W) == GLFW_PRESS)
@@ -445,7 +443,7 @@ struct AlloApp : DistributedApp
              return false; 
           return (eye - p1.position).mag() > (eye - p2.position).mag(); });
 
-    Vec3f offset(0.9f, 0.75f, 5.0f);
+    Vec3f offset(0.25f, 0.25f, 5.0f);
     nav().pos(points[0].position + offset);
 
     // parameterServer() << points;
@@ -453,8 +451,6 @@ struct AlloApp : DistributedApp
 
   bool onKeyUp(const Keyboard &k) override
   {
-    // if (!isPrimary())
-    //   return true;
 
     float delta_time = 0.0f;
     Vec3f going_dir;
@@ -518,8 +514,6 @@ struct AlloApp : DistributedApp
 
   bool onKeyDown(const Keyboard &k) override
   {
-    // if (!isPrimary())
-    //   return true;
 
     if (k.key() == 'w')
     {
@@ -677,7 +671,7 @@ struct AlloApp : DistributedApp
     glEnable(GL_DEPTH_TEST);
     glDepthFunc(GL_LEQUAL);
     g.shader(skyboxShader);
-    g.shader().uniform("projection", view().projMatrix(width(), height()));
+    g.shader().uniform("projection", view().projMatrix(fbWidth(), fbHeight()));
     g.shader().uniform("view", view().viewMatrix());
     g.shader().uniform("cubemap", 0);
 
@@ -689,7 +683,6 @@ struct AlloApp : DistributedApp
     glDepthFunc(GL_LESS); // set depth function back to default
 
     texture.unbind();
-    // texture_alt.unbind();
     hdrFBO.unbind();
 
     // 2nd blur pass (multiple times)
@@ -720,7 +713,6 @@ struct AlloApp : DistributedApp
 
       blurFBO[i % 2].unbind();
     }
-
     // hdrFBO.bind();
     // glBindFramebuffer(GL_DRAW_FRAMEBUFFER, 0); // write to default framebuffer
     // // blit to default framebuffer. Note that this may or may not work as the internal formats of both the FBO and default framebuffer have to match.
@@ -730,17 +722,10 @@ struct AlloApp : DistributedApp
     // glBindFramebuffer(GL_FRAMEBUFFER, 0);
 
     // 3rd pass rendered back to dof with tone mapping
-    dofFBO.bind();
+    // dofFBO.bind();
+    g.framebuffer(FBO::DEFAULT);
     g.viewport(0, 0, fbWidth(), fbHeight());
-
     glDisable(GL_DEPTH_TEST);
-    // glClear(GL_DEPTH_BUFFER_BIT | GL_COLOR_BUFFER_BIT);
-
-    // g.shader(debugShader);
-    // g.shader().uniform("debugText", 0);
-    // background.bind(0);
-    // renderQuad();
-
     g.shader(bloomShader);
     g.shader().uniform("scene", 0);
     g.shader().uniform("bloomBlur", 1);
@@ -748,14 +733,15 @@ struct AlloApp : DistributedApp
     blur_tex[1].bind(1);
     renderQuad();
 
-    dofFBO.unbind();
+    // dofFBO.unbind();
 
-    // 4th pass, dof as a post process
-    g.shader(dofShader);
-    g.shader().uniform("postBuffer", 0);
-    dof_tex.bind(0);
-    renderQuad();
-    // // draw skybox
+    // // 4th pass, dof as a post process
+    // g.shader(dofShader);
+    // g.shader().uniform("postBuffer", 0);
+    // dof_tex.bind(0);
+    // // g.quadViewport(dof_tex);
+    // renderQuad();
+    //  draw skybox
 
     // // debug
     // g.clear(0, 0, 0);
@@ -763,7 +749,10 @@ struct AlloApp : DistributedApp
     // g.quadViewport(background);
   }
 
-  void onResize(int w, int h) override { updateFBO(w, h); };
+  void onResize(int w, int h) override
+  {
+    updateFBO(w, h);
+  };
 
   void onSound(AudioIOData &io) override
   {
